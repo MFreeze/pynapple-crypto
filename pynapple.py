@@ -555,12 +555,12 @@ class KeyboardHandler:
                 if not strlen(port):
                     port="6667"
                 if port.isdigit():
-                    self.print_status("connecting to " + server + ":" + port)
+                    irc.print_status("connecting to " + server + ":" + port)
                     irc.connect(server, int(port))
                 else:
-                    self.print_status("port must be specified as an integer")
+                    irc.print_status("port must be specified as an integer")
             else:
-                self.print_status("usage: connect <server:port>")
+                irc.print_status("usage: connect <server:port>")
         elif (cmd == "disconnect"):
             # Disconnect from the current IRC server.
             irc.part()
@@ -568,7 +568,7 @@ class KeyboardHandler:
         elif (cmd == "join"):
             # Join the given channel.
             if (len(args) < 1):
-                self.print_status("usage: join <channel>")
+                irc.print_status("usage: join <channel>")
             else:
                 irc.join(args[0])
         elif (cmd == "part"):
@@ -577,13 +577,13 @@ class KeyboardHandler:
         elif (cmd == "msg"):
             # Send a private message to the given user.
             if (len(args) < 2):
-                self.print_status("usage: msg <nick> <message>")
+                irc.print_status("usage: msg <nick> <message>")
             else:
                 msg = ' '.join(args[1:])
                 irc.send_private_message(args[0], msg)
         elif (cmd == "nick"):
             if (len(args) < 1):
-                self.print_status("usage: nick <new nick>")
+                irc.print_status("usage: nick <new nick>")
             else:
                 irc.set_nick(args[0])
         elif (cmd == "debug"):
@@ -594,14 +594,14 @@ class KeyboardHandler:
             irc.request_nicklist()
         elif (cmd == "help"):
             # Print a list of commands.
-            self.print_status("available commands:")
-            self.print_status("/connect <server:port>")
-            self.print_status("/disconnect")
-            self.print_status("/join <channel>")
-            self.print_status("/part")
-            self.print_status("/msg <nick> <message>")
-            self.print_status("/nick <new nick>")
-            self.print_status("/quit")
+            irc.print_status("available commands:")
+            irc.print_status("/connect <server:port>")
+            irc.print_status("/disconnect")
+            irc.print_status("/join <channel>")
+            irc.print_status("/part")
+            irc.print_status("/msg <nick> <message>")
+            irc.print_status("/nick <new nick>")
+            irc.print_status("/quit")
         elif (cmd == "quit"):
             # Quit the program.
             irc.part()
@@ -614,7 +614,7 @@ class KeyboardHandler:
         else:
             # The user entered an unknown command, punish them!
             msg = "unknown command: " + cmd
-            self.print_status(msg)
+            irc.print_status(msg)
         self.lastCommandString = s
 
 # Argument parsing
