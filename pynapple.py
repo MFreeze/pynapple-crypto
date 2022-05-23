@@ -552,7 +552,7 @@ class KeyboardHandler:
             # Connect to the given IRC server.
             if (len(args) == 1) and (args[0].count(":") == 1):
                 server, port = args[0].split(':')
-                if not strlen(port):
+                if not len(port):
                     port="6667"
                 if port.isdigit():
                     irc.print_status("connecting to " + server + ":" + port)
