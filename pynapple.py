@@ -35,7 +35,7 @@ class IRC:
     stopThreadRequest = threading.Event()
     rxQueue = queue.Queue()
 
-    def __init__(self, nick="pynapple", server="", channel="", 
+    def __init__(self, nick="pynapple", server=None, port=6667, channel=None, 
                  topic="", user="pynapple", name="Pynapple",
                  logfile="log.txt", role="attacker"):
         """Constructor
@@ -51,11 +51,18 @@ class IRC:
         self.nick = nick
         self.channel = channel
         self.server = server
+        self.port = port
         self.topic = topic
         self.user = user
         self.name = name
         self.logfile = logfile
         self.role = role
+
+        if self.server is not None:
+            self.connect(self.server, self.port)
+            if self.channel is not None:
+                self.join(self.channel)
+
 
     def start_thread(self):
         # Spawn a new thread to handle incoming data. This function expects that
@@ -72,6 +79,19 @@ class IRC:
         # Signal the socket thread to terminate by setting a shared event flag.
         self.stopThreadRequest.set()
 
+    def print_status(self, message):
+        try:
+            ui.add_status_message(message)
+        except:
+            print(message)
+
+    def print_debug(self, message):
+        try:
+            ui.add_debug_message(message)
+        except:
+            print("DEBUG: " + message)
+        
+
     def connect(self, server, port):
         # Connect to an IRC server using a given host name and port. Creates a
         # network socket that is used by a separate thread when receiving data.
@@ -79,19 +99,19 @@ class IRC:
             self.server = server
             self.port = port
             self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            self.sock.connect((server, port))
+            self.sock.connect((self.server, self.port))
             self.start_thread()
-            ui.add_status_message("connecting to %s:%s" % (server, str(port)))
+            self.print_status("connecting to %s:%s" % (server, str(port)))
             self.connected = True
             self.login(self.nick, self.user, self.name, self.host, server)
         else:
-            ui.add_status_message("already connected")
+            self.print_status("already connected")
 
     def send(self, command):
         # Send data to a connected IRC server.
         if (self.connected):
             self.sock.send(bytes(command + '\n', 'UTF-8'))
-            ui.add_debug_message("-> " + command)
+            self.print_debug("-> " + command)
 
     def send_message(self, s):
         # Send a message to the currently joined channel.
@@ -99,7 +119,7 @@ class IRC:
             ui.add_nick_message(self.get_nick(), s)
             self.send("PRIVMSG %s :%s" % (self.channel, s))
         else:
-            ui.add_status_message("not in a channel")
+            self.print_status("not in a channel")
 
     def send_private_message(self, nick, s):
         # Send a private message to the given nickname.
@@ -107,7 +127,7 @@ class IRC:
             self.send("PRIVMSG %s :%s" % (nick, s))
             ui.add_nick_message(self.get_nick(), "[%s] %s" % (nick, s))
         else:
-            ui.add_status_message("not connected")
+            self.print_status("not connected")
 
     def get_status(self):
         return (self.nick, self.server, self.channel, self.topic)
@@ -119,16 +139,16 @@ class IRC:
             self.stop_thread()
             self.connected = False
             self.server = ""
-            ui.add_status_message("disconnected")
+            self.print_status("disconnected")
             ui.update_status()
         else:
-            ui.add_status_message("not connected")
+            self.print_status("not connected")
 
     def login(self, nick, user, name, host, server):
         # Send a log-in stanza to the currently connected server.
         self.send("USER %s %s %s %s" % (user, host, server, name))
         self.send("NICK %s" % nick)
-        ui.add_status_message("using nickname %s" % nick)
+        self.print_status("using nickname %s" % nick)
 
     def join(self, channel):
         # Join the given channel.
@@ -136,21 +156,21 @@ class IRC:
             if (not self.joined):
                 self.send("JOIN %s" % channel)
             else:
-                ui.add_status_message("already in a channel")
+                self.print_status("already in a channel")
         else:
-            ui.add_status_message("not connected")
+            self.print_status("not connected")
 
     def part(self):
         # Leave the current channel.
         if (self.joined):
             self.send("PART %s" % self.channel)
             self.set_nicklist([])
-            ui.add_status_message("left channel %s " % self.channel)
+            self.print_status("left channel %s " % self.channel)
             self.joined = False
             self.channel = ""
             ui.update_status()
         else:
-            ui.add_status_message("not in a channel")
+            self.print_status("not in a channel")
 
     def add_nick(self, s):
         # Add a nickname to the list of nicknames we think are in the channel.
@@ -169,7 +189,7 @@ class IRC:
         self.del_nick(old)
         self.add_nick(new)
         ui.set_nicklist(self.nicklist)
-        ui.add_status_message("%s is now known as %s" % (old, new))
+        self.print_status("%s is now known as %s" % (old, new))
 
     def request_nicklist(self):
         # Send a request to the IRC server to give us a list of nicknames
@@ -203,7 +223,7 @@ class IRC:
         return self.connected
 
     def handle_ctcp(self, cmd, msg):
-        ui.add_status_message("got CTCP message: " + cmd)
+        self.print_status("got CTCP message: " + cmd)
         if (cmd == "VERSION"):
             self.send("VERSION pynapple-irc %s" % self.version)
         if (cmd == "ACTION"):
@@ -232,7 +252,7 @@ class IRC:
         except:
             pass
         if (rx != ""):
-            ui.add_debug_message("<- " + rx)
+            self.print_debug("<- " + rx)
             self.logToFile(rx)
             self.handle_message(self.parse_message(rx))
 
@@ -279,16 +299,16 @@ class IRC:
                 self.joined = True
                 self.channel = args[0]
                 ui.update_status()
-                ui.add_status_message("joined channel %s " % self.channel)
+                self.print_status("joined channel %s " % self.channel)
             elif (nick != self.nick):
                 # A user has joined the channel. Update nick list.
                 self.add_nick(prefix[:prefix.find('!')])
-                ui.add_status_message("%s joined the channel" % nick)
+                self.print_status("%s joined the channel" % nick)
         if (cmd == "PART" and args[0] == self.channel):
             # A user has left the channel. Update nick list.
             nick = prefix[:prefix.find('!')]
             self.del_nick(nick)
-            ui.add_status_message("%s left the channel" % nick)
+            self.print_status("%s left the channel" % nick)
         if (cmd == "353"):
             # Receiving a list of users in the channel (aka RPL_NAMEREPLY).
             # Note that the user list may span multiple 353 messages.
@@ -296,7 +316,7 @@ class IRC:
             self.set_nicklist(nicklist)
         if (cmd == "376"):
             # Finished receiving the message of the day (MOTD).
-            ui.add_status_message("MOTD received, ready for action")
+            self.print_status("MOTD received, ready for action")
             ui.update_status()
         if (cmd == "NICK"):
             old = prefix[:prefix.find('!')]
@@ -479,13 +499,15 @@ class KeyboardHandler:
             # Connect to the given IRC server.
             if (len(args) == 1) and (args[0].count(":") == 1):
                 server, port = args[0].split(':')
+                if not strlen(port):
+                    port="6667"
                 if port.isdigit():
-                    ui.add_status_message("connecting to " + server + ":" + port)
+                    self.print_status("connecting to " + server + ":" + port)
                     irc.connect(server, int(port))
                 else:
-                    ui.add_status_message("port must be specified as an integer")
+                    self.print_status("port must be specified as an integer")
             else:
-                ui.add_status_message("usage: connect <server:port>")
+                self.print_status("usage: connect <server:port>")
         elif (cmd == "disconnect"):
             # Disconnect from the current IRC server.
             irc.part()
@@ -493,7 +515,7 @@ class KeyboardHandler:
         elif (cmd == "join"):
             # Join the given channel.
             if (len(args) < 1):
-                ui.add_status_message("usage: join <channel>")
+                self.print_status("usage: join <channel>")
             else:
                 irc.join(args[0])
         elif (cmd == "part"):
@@ -502,13 +524,13 @@ class KeyboardHandler:
         elif (cmd == "msg"):
             # Send a private message to the given user.
             if (len(args) < 2):
-                ui.add_status_message("usage: msg <nick> <message>")
+                self.print_status("usage: msg <nick> <message>")
             else:
                 msg = ' '.join(args[1:])
                 irc.send_private_message(args[0], msg)
         elif (cmd == "nick"):
             if (len(args) < 1):
-                ui.add_status_message("usage: nick <new nick>")
+                self.print_status("usage: nick <new nick>")
             else:
                 irc.set_nick(args[0])
         elif (cmd == "debug"):
@@ -519,14 +541,14 @@ class KeyboardHandler:
             irc.request_nicklist()
         elif (cmd == "help"):
             # Print a list of commands.
-            ui.add_status_message("available commands:")
-            ui.add_status_message("/connect <server:port>")
-            ui.add_status_message("/disconnect")
-            ui.add_status_message("/join <channel>")
-            ui.add_status_message("/part")
-            ui.add_status_message("/msg <nick> <message>")
-            ui.add_status_message("/nick <new nick>")
-            ui.add_status_message("/quit")
+            self.print_status("available commands:")
+            self.print_status("/connect <server:port>")
+            self.print_status("/disconnect")
+            self.print_status("/join <channel>")
+            self.print_status("/part")
+            self.print_status("/msg <nick> <message>")
+            self.print_status("/nick <new nick>")
+            self.print_status("/quit")
         elif (cmd == "quit"):
             # Quit the program.
             irc.part()
@@ -539,7 +561,7 @@ class KeyboardHandler:
         else:
             # The user entered an unknown command, punish them!
             msg = "unknown command: " + cmd
-            ui.add_status_message(msg)
+            self.print_status(msg)
         self.lastCommandString = s
 
 # Argument parsing
@@ -555,10 +577,13 @@ parser.add_argument("-l", "--log", help="Specify logfile",
                     default="log.txt")
 parser.add_argument("-s", "--server", 
                     help="Specify a server to connect to", 
-                    default="irc.libera.org:6667")
+                    default="irc.libera.chat")
 parser.add_argument("-c", "--channel", 
                     help="Specify a channel to connect to", 
                     default="#pynapple")
+parser.add_argument("-p", "--port", 
+                    help="Specify port on which server is listening", 
+                    type=int, default=6667)
 parser.add_argument("-r", "--role", help="Specify attacker or defender", 
                     default="attacker",
                     choices=["attacker", "defender"])
@@ -568,8 +593,13 @@ args = parser.parse_args()
 if args.channel and args.channel[0] != '#':
     args.channel = '#' + args.channel
 
-irc = IRC(name=args.name, nick=args.nick, channel=args.channel,
-          user=args.user, logfile=args.log)
+irc = IRC(name=args.name, 
+          nick=args.nick, 
+          server=args.server,
+          port=args.port,
+          channel=args.channel,
+          user=args.user, 
+          logfile=args.log)
 kb = KeyboardHandler()
 ui = UserInterface(irc_instance=irc, keyboard_handler=kb)
 ui.run()
