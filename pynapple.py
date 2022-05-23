@@ -38,10 +38,19 @@ class IRC:
     stopThreadRequest = threading.Event()
     rxQueue = queue.Queue()
 
-    def __init__(self, nick="pynapple", server=None, port=6667, channel=None, 
-                 topic="", user="pynapple", name="Pynapple",
-                 logfile="log.txt", role="attacker", attack_key=None, 
-                 defend_key=None):
+    def __init__(self, 
+                 attacker_key=None,
+                 channel=None,
+                 defender_key=None,
+                 log_file="log.txt",
+                 message_log_file="cyphered.txt",
+                 name="Pynapple",
+                 nick="pynapple", 
+                 port=6667,
+                 role="attacker",
+                 server=None,
+                 topic="",
+                 user="pynapple"):
         """Constructor
 
         :nick: TODO
@@ -59,15 +68,16 @@ class IRC:
         self.topic = topic
         self.user = user
         self.name = name
-        self.logfile = logfile
+        self.log_file = log_file
+        self.message_log_file = message_log_file
         self.role = role
-        if attack_key is not None:
-            self.monosub = MonoAlphabeticSubstitution(attack_key)
+        if attacker_key is not None:
+            self.monosub = MonoAlphabeticSubstitution(attacker_key)
         else:
             self.monosub = MonoAlphabeticSubstitution("abcdefghijklmnopqrstuvwxyz")
 
-        if defend_key is not None:
-            self.vigenere = Vigenere(defend_key)
+        if defender_key is not None:
+            self.vigenere = Vigenere(defender_key)
         else:
             self.vigenere = Vigenere("z")
 
@@ -75,6 +85,12 @@ class IRC:
             self.connect(self.server, self.port)
             if self.channel is not None:
                 self.join(self.channel)
+
+        if message_log_file is not None:
+            self.message_fd = open(message_log_file, "a")
+            self.cyphered_logging = True
+        else:
+            self.cyphered_logging = False
 
 
     def start_thread(self):
@@ -163,6 +179,8 @@ class IRC:
             self.server = ""
             self.print_status("disconnected")
             ui.update_status()
+            if self.cyphered_logging:
+                self.message_fd.close()
         else:
             self.print_status("not connected")
 
@@ -259,7 +277,7 @@ class IRC:
         # The logfile is opened for writing if not already open.
         if (not self.logEnabled):
             self.logEnabled = True
-            self.file = open(self.logfile, 'w')
+            self.file = open(self.log_file, 'w')
         self.file.write(s + "\n")
         self.file.flush()
 
@@ -319,6 +337,9 @@ class IRC:
                     elif role == "defender":
                         dc = self.vigenere.decypher(content)
                         message = "%s <-> %s" % (role, dc)
+                    if self.cyphered_logging and role != self.role:
+                        print(content, file=self.message_fd)
+                        self.message_fd.flush()
                 except:
                     pass
                 ui.add_nick_message(nick, message)
@@ -599,46 +620,50 @@ class KeyboardHandler:
 # Argument parsing
 parser = argparse.ArgumentParser(description="Set parameters for irc client")
 
-parser.add_argument("-n", "--nick", help="Specify IRC nickname",
-                    default="pynapple")
-parser.add_argument("-u", "--user", help="Specify user name",
-                    default="pynapple")
-parser.add_argument("-N", "--name", help="Specify user real name",
-                    default="Pynapple User")
-parser.add_argument("-l", "--log", help="Specify logfile",
-                    default="log.txt")
-parser.add_argument("-s", "--server", 
-                    help="Specify a server to connect to", 
-                    default="irc.libera.chat")
+parser.add_argument("-a", "--attacker-key", 
+                    help="Specify attacker cypher key", default=None)
+parser.add_argument("-d", "--defender-key", 
+                    help="Specify defender cypher key", default=None)
 parser.add_argument("-c", "--channel", 
                     help="Specify a channel to connect to", 
                     default="#pynapple")
+parser.add_argument("-l", "--log", help="Specify logfile",
+                    default="log.txt")
+parser.add_argument("-L", "--message-log-file", 
+                    help="Specify a file that will contain all the encrypted messages", 
+                    default="cyphered.log")
+parser.add_argument("-n", "--nick", help="Specify IRC nickname",
+                    default="pynapple")
+parser.add_argument("-N", "--name", help="Specify user real name",
+                    default="Pynapple User")
 parser.add_argument("-p", "--port", 
                     help="Specify port on which server is listening", 
                     type=int, default=6667)
 parser.add_argument("-r", "--role", help="Specify attacker or defender", 
                     default="attacker",
                     choices=["attacker", "defender"])
-parser.add_argument("-a", "--attackkey", 
-                    help="Specify attacker cypher key", default=None)
-parser.add_argument("-d", "--defendkey", 
-                    help="Specify defender cypher key", default=None)
+parser.add_argument("-s", "--server", 
+                    help="Specify a server to connect to", 
+                    default="irc.libera.chat")
+parser.add_argument("-u", "--user", help="Specify user name",
+                    default="pynapple")
 
 args = parser.parse_args()
 
 if args.channel and args.channel[0] != '#':
     args.channel = '#' + args.channel
 
-irc = IRC(name=args.name, 
-          nick=args.nick, 
-          server=args.server,
-          port=args.port,
+irc = IRC(attacker_key=args.attacker_key,
           channel=args.channel,
-          user=args.user, 
-          logfile=args.log,
+          defender_key=args.defender_key,
+          log_file=args.log,
+          message_log_file=args.message_log_file,
+          name=args.name, 
+          nick=args.nick, 
+          port=args.port,
           role=args.role,
-          attack_key=args.attackkey,
-          defend_key=args.defendkey)
+          server=args.server,
+          user=args.user)
 
 kb = KeyboardHandler()
 ui = UserInterface(irc_instance=irc, keyboard_handler=kb)
