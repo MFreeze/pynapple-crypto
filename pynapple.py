@@ -16,6 +16,7 @@ import socket
 import string
 import threading
 import time
+import argparse
 
 from pynapple_tkui import *
 #from pynapple_ncui import *
@@ -23,23 +24,38 @@ from pynapple_tkui import *
 class IRC:
     # Encapsulates a connection to an IRC server. Handles sending / receiving of
     # messages, message parsing, connection and disconnection, etc.
-    nick = "pynapple"
-    host = "localhost"
-    server = ""
-    topic = ""
-    user = "pynapple"
-    name = "Pynapple"
+    host="localhost"
     partMessage = "Parting!"
     quitMessage = "Quitting!"
-    logfile = "log.txt"
     version = "0.0000001"
-    channel = ""
     nicklist = []
     connected = False
     joined = False
     logEnabled = False
     stopThreadRequest = threading.Event()
     rxQueue = queue.Queue()
+
+    def __init__(self, nick="pynapple", server="", channel="", 
+                 topic="", user="pynapple", name="Pynapple",
+                 logfile="log.txt", role="attacker"):
+        """Constructor
+
+        :nick: TODO
+        :channel: TODO
+        :server: TODO
+        :topic: TODO
+        :logfile: TODO
+        :returns: TODO
+
+        """
+        self.nick = nick
+        self.channel = channel
+        self.server = server
+        self.topic = topic
+        self.user = user
+        self.name = name
+        self.logfile = logfile
+        self.role = role
 
     def start_thread(self):
         # Spawn a new thread to handle incoming data. This function expects that
@@ -80,7 +96,7 @@ class IRC:
     def send_message(self, s):
         # Send a message to the currently joined channel.
         if (self.joined):
-            ui.add_nick_message(irc.get_nick(), s)
+            ui.add_nick_message(self.get_nick(), s)
             self.send("PRIVMSG %s :%s" % (self.channel, s))
         else:
             ui.add_status_message("not in a channel")
@@ -89,7 +105,7 @@ class IRC:
         # Send a private message to the given nickname.
         if (self.connected):
             self.send("PRIVMSG %s :%s" % (nick, s))
-            ui.add_nick_message(irc.get_nick(), "[%s] %s" % (nick, s))
+            ui.add_nick_message(self.get_nick(), "[%s] %s" % (nick, s))
         else:
             ui.add_status_message("not connected")
 
@@ -242,7 +258,7 @@ class IRC:
         prefix, cmd, args = msg
         if (cmd == "PING"):
             # Reply to PING, per RFC 1459 otherwise we'll get disconnected.
-            irc.send("PONG %s" % args[0])
+            self.send("PONG %s" % args[0])
         if (cmd == "PRIVMSG"):
             # Either a channel message or a private message; check and display.
             message = ' '.join(args[1:])
@@ -252,7 +268,7 @@ class IRC:
                 ctcp_cmd = ctcp[0]
                 ctcp_msg = ' '.join(ctcp[1:])
                 self.handle_ctcp(ctcp_cmd, ctcp_msg)
-            elif (args[0] == irc.channel):
+            elif (args[0] == self.channel):
                 ui.add_nick_message(nick, message)
             else:
                 ui.add_private_message(nick, message)
@@ -266,18 +282,18 @@ class IRC:
                 ui.add_status_message("joined channel %s " % self.channel)
             elif (nick != self.nick):
                 # A user has joined the channel. Update nick list.
-                irc.add_nick(prefix[:prefix.find('!')])
+                self.add_nick(prefix[:prefix.find('!')])
                 ui.add_status_message("%s joined the channel" % nick)
-        if (cmd == "PART" and args[0] == irc.channel):
+        if (cmd == "PART" and args[0] == self.channel):
             # A user has left the channel. Update nick list.
             nick = prefix[:prefix.find('!')]
-            irc.del_nick(nick)
+            self.del_nick(nick)
             ui.add_status_message("%s left the channel" % nick)
         if (cmd == "353"):
             # Receiving a list of users in the channel (aka RPL_NAMEREPLY).
             # Note that the user list may span multiple 353 messages.
             nicklist = ' '.join(args[3:]).split()
-            irc.set_nicklist(nicklist)
+            self.set_nicklist(nicklist)
         if (cmd == "376"):
             # Finished receiving the message of the day (MOTD).
             ui.add_status_message("MOTD received, ready for action")
@@ -330,10 +346,11 @@ class UserInterface:
     # entering messages and application commands.
     badwords = []
     hilites = []
-    def __init__(self):
+    def __init__(self, irc_instance, keyboard_handler):
         self.badwords = self.load_list("badwords.txt")
         self.hilites = self.load_list("hilites.txt")
-        self.uiPlugin = UserInterfacePlugin(irc, kb)
+        self.uiPlugin = UserInterfacePlugin(irc_instance,
+                                            keyboard_handler)
         self.colors = self.uiPlugin.get_max_colors()
         self.draw_pineapple()
         self.add_status_message("welcome to pynapple-irc v" + irc.get_version())
@@ -525,10 +542,34 @@ class KeyboardHandler:
             ui.add_status_message(msg)
         self.lastCommandString = s
 
-# I suppose the program actually starts here. Create some global objects which
-# initialize themselves, and then jump in to a polling loop, checking for input
-# from the keyboard and network. The program exits when the user types /quit.
-irc = IRC()
+# Argument parsing
+parser = argparse.ArgumentParser(description="Set parameters for irc client")
+
+parser.add_argument("-n", "--nick", help="Specify IRC nickname",
+                    default="pynapple")
+parser.add_argument("-u", "--user", help="Specify user name",
+                    default="pynapple")
+parser.add_argument("-N", "--name", help="Specify user real name",
+                    default="Pynapple User")
+parser.add_argument("-l", "--log", help="Specify logfile",
+                    default="log.txt")
+parser.add_argument("-s", "--server", 
+                    help="Specify a server to connect to", 
+                    default="irc.libera.org:6667")
+parser.add_argument("-c", "--channel", 
+                    help="Specify a channel to connect to", 
+                    default="#pynapple")
+parser.add_argument("-r", "--role", help="Specify attacker or defender", 
+                    default="attacker",
+                    choices=["attacker", "defender"])
+
+args = parser.parse_args()
+
+if args.channel and args.channel[0] != '#':
+    args.channel = '#' + args.channel
+
+irc = IRC(name=args.name, nick=args.nick, channel=args.channel,
+          user=args.user, logfile=args.log)
 kb = KeyboardHandler()
-ui = UserInterface()
+ui = UserInterface(irc_instance=irc, keyboard_handler=kb)
 ui.run()
