@@ -19,6 +19,7 @@ import time
 import argparse
 
 from MonoAlphabeticSubstitution import MonoAlphabeticSubstitution
+from Vigenere import Vigenere
 
 from pynapple_tkui import *
 #from pynapple_ncui import *
@@ -39,7 +40,8 @@ class IRC:
 
     def __init__(self, nick="pynapple", server=None, port=6667, channel=None, 
                  topic="", user="pynapple", name="Pynapple",
-                 logfile="log.txt", role="attacker", key=None):
+                 logfile="log.txt", role="attacker", attack_key=None, 
+                 defend_key=None):
         """Constructor
 
         :nick: TODO
@@ -59,10 +61,15 @@ class IRC:
         self.name = name
         self.logfile = logfile
         self.role = role
-        if key is not None:
-            self.monosub = MonoAlphabeticSubstitution(key)
+        if attack_key is not None:
+            self.monosub = MonoAlphabeticSubstitution(attack_key)
         else:
             self.monosub = MonoAlphabeticSubstitution("abcdefghijklmnopqrstuvwxyz")
+
+        if defend_key is not None:
+            self.vigenere = Vigenere(defend_key)
+        else:
+            self.vigenere = Vigenere("z")
 
         if self.server is not None:
             self.connect(self.server, self.port)
@@ -125,6 +132,9 @@ class IRC:
             if self.role == "attacker":
                 ui.add_nick_message("Private", s)
                 cyphered = self.monosub.cypher(s)
+            elif self.role == "defender":
+                ui.add_nick_message("Private", s)
+                cyphered = self.vigenere.cypher(s)
             else:
                 cyphered = s
             m = "%s <-> %s" % (self.role, cyphered)
@@ -305,6 +315,9 @@ class IRC:
                     role, content = message.split(" <-> ")
                     if role == "attacker":
                         dc = self.monosub.decypher(content)
+                        message = "%s <-> %s" % (role, dc)
+                    elif role == "defender":
+                        dc = self.vigenere.decypher(content)
                         message = "%s <-> %s" % (role, dc)
                 except:
                     pass
@@ -606,7 +619,10 @@ parser.add_argument("-p", "--port",
 parser.add_argument("-r", "--role", help="Specify attacker or defender", 
                     default="attacker",
                     choices=["attacker", "defender"])
-parser.add_argument("-k", "--key", help="Specify cypher key", default=None)
+parser.add_argument("-a", "--attackkey", 
+                    help="Specify attacker cypher key", default=None)
+parser.add_argument("-d", "--defendkey", 
+                    help="Specify defender cypher key", default=None)
 
 args = parser.parse_args()
 
@@ -620,7 +636,10 @@ irc = IRC(name=args.name,
           channel=args.channel,
           user=args.user, 
           logfile=args.log,
-          key=args.key)
+          role=args.role,
+          attack_key=args.attackkey,
+          defend_key=args.defendkey)
+
 kb = KeyboardHandler()
 ui = UserInterface(irc_instance=irc, keyboard_handler=kb)
 ui.run()
