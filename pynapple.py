@@ -631,7 +631,7 @@ parser.add_argument("-l", "--log", help="Specify logfile",
                     default="log.txt")
 parser.add_argument("-L", "--message-log-file", 
                     help="Specify a file that will contain all the encrypted messages", 
-                    default="cyphered.log")
+                    default=None)
 parser.add_argument("-n", "--nick", help="Specify IRC nickname",
                     default="pynapple")
 parser.add_argument("-N", "--name", help="Specify user real name",
