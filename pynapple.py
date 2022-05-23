@@ -18,6 +18,8 @@ import threading
 import time
 import argparse
 
+from MonoAlphabeticSubstitution import MonoAlphabeticSubstitution
+
 from pynapple_tkui import *
 #from pynapple_ncui import *
 
@@ -37,7 +39,7 @@ class IRC:
 
     def __init__(self, nick="pynapple", server=None, port=6667, channel=None, 
                  topic="", user="pynapple", name="Pynapple",
-                 logfile="log.txt", role="attacker"):
+                 logfile="log.txt", role="attacker", key=None):
         """Constructor
 
         :nick: TODO
@@ -57,6 +59,10 @@ class IRC:
         self.name = name
         self.logfile = logfile
         self.role = role
+        if key is not None:
+            self.monosub = MonoAlphabeticSubstitution(key)
+        else:
+            self.monosub = MonoAlphabeticSubstitution("abcdefghijklmnopqrstuvwxyz")
 
         if self.server is not None:
             self.connect(self.server, self.port)
@@ -116,8 +122,14 @@ class IRC:
     def send_message(self, s):
         # Send a message to the currently joined channel.
         if (self.joined):
-            ui.add_nick_message(self.get_nick(), s)
-            self.send("PRIVMSG %s :%s" % (self.channel, s))
+            if self.role == "attacker":
+                ui.add_nick_message("Private", s)
+                cyphered = self.monosub.cypher(s)
+            else:
+                cyphered = s
+            m = "%s <-> %s" % (self.role, cyphered)
+            ui.add_nick_message(self.get_nick(), m)
+            self.send("PRIVMSG %s :%s" % (self.channel, m))
         else:
             self.print_status("not in a channel")
 
@@ -289,6 +301,13 @@ class IRC:
                 ctcp_msg = ' '.join(ctcp[1:])
                 self.handle_ctcp(ctcp_cmd, ctcp_msg)
             elif (args[0] == self.channel):
+                try:
+                    role, content = message.split(" <-> ")
+                    if role == "attacker":
+                        dc = self.monosub.decypher(content)
+                        message = "%s <-> %s" % (role, dc)
+                except:
+                    pass
                 ui.add_nick_message(nick, message)
             else:
                 ui.add_private_message(nick, message)
@@ -587,6 +606,7 @@ parser.add_argument("-p", "--port",
 parser.add_argument("-r", "--role", help="Specify attacker or defender", 
                     default="attacker",
                     choices=["attacker", "defender"])
+parser.add_argument("-k", "--key", help="Specify cypher key", default=None)
 
 args = parser.parse_args()
 
@@ -599,7 +619,8 @@ irc = IRC(name=args.name,
           port=args.port,
           channel=args.channel,
           user=args.user, 
-          logfile=args.log)
+          logfile=args.log,
+          key=args.key)
 kb = KeyboardHandler()
 ui = UserInterface(irc_instance=irc, keyboard_handler=kb)
 ui.run()
